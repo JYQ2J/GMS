@@ -1,4 +1,4 @@
-# pcw-strategy
+# GMS - Gray-Mapping-Strategy Platform
 
 ## Project setup
 ```
