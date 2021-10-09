@@ -42,13 +42,18 @@
           />
         </a-row>
         <a-row v-for="(v, vIndex) in r.variable" :key="vIndex" :index="vIndex" class="mt-5">
-          <a-input-group compact size="small" style="width: calc(100% - 26px);">
+          <a-input-group compact size="small" style="width: calc(100% - 26px); float: left;">
             <a-select
               v-model="v.type"
               :options="[
                 { key: 'KEY', title: keyProp[type].name },
-                { key: 'VALUE', title: '常量' },
-              ]"
+                { key: 'VALUE', title: '常量' }
+              ].concat(type === 'mapping' ? [
+                { key: 'INDEX', title: 'Index' },
+                { key: 'TIMESTAMP', title: '时间' },
+                { key: 'INPUT', title: '参数' },
+                { key: 'QS', title: '继承' }
+              ] : [])"
               :style="`width: ${keyProp[type].width}px;`"
               placeholder="类型"
               size="small"
@@ -56,7 +61,7 @@
             <a-select
               v-if="type === 'mapping'"
               v-model="v.field"
-              :disabled="v.type === 'VALUE' || v.operation === 'FIND'"
+              :disabled="['VALUE', 'TIMESTAMP', 'QS', 'INDEX'].includes(v.type) || v.operation === 'FIND'"
               :options="[
                 { key: 'LOCAL', title: '局部' },
                 { key: 'GLOBAL', title: '全局' },
@@ -70,19 +75,25 @@
               :options="vIndex ? operations : [
                 { key: '!!', title: '存在' },
                 { key: '!', title: '非' }
-              ].concat(type === 'mapping' ? [{ key: 'FIND', title: '过滤' }] : [])"
+              ].concat(type === 'mapping' ? [{ key: 'FIND', title: 'FIND' }, { key: 'FILTER', title: '过滤' }] : [])"
               placeholder="运算"
               size="small"
               style="width: 70px;"
             />
-            <a-input v-model="v.value" :style="`width: calc(100% - 210px); text-align: right;`" />
+            <a-input
+              v-model="v.value"
+              @blur="() => v.value = (v.value || '').trim()"
+              :disabled="['TIMESTAMP', 'QS', 'INDEX'].includes(v.type)"
+              :placeholder="v.type === 'TIMESTAMP' ? '当前时间戳毫秒数' : ''"
+              :style="`width: calc(100% - 210px); text-align: right;`"
+            />
           </a-input-group>
           <a-icon
             v-if="vIndex"
             class="card-right-icon"
             type="minus-circle"
             theme="twoTone"
-            style="font-size: 16px; width: 26px;"
+            style="font-size: 16px; width: 26px; vertical-align: middle;"
             @click="r.variable.splice(vIndex, 1)"
           />
           <a-icon
@@ -92,7 +103,7 @@
             class="card-right-icon"
             type="plus-circle"
             theme="twoTone"
-            style="font-size: 16px; width: 26px;"
+            style="font-size: 16px; width: 26px; vertical-align: middle;"
             @click="r.variable.push(variableBlank(r.variable))"
           />
         </a-row>
@@ -124,7 +135,7 @@ export default {
         },
         mapping: {
           name: '节点',
-          width: 65
+          width: 67
         }
       },
       operations: [
@@ -138,6 +149,7 @@ export default {
         { key: '-', title: '减' },
         { key: '*', title: '乘' },
         { key: '/', title: '除' },
+        { key: 'TODAY', title: '今日' },
         { key: 'WEEK', title: '星期' },
         { key: 'MONTH', title: '月份' },
         { key: 'YEAR', title: '年份' },

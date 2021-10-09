@@ -13,7 +13,6 @@
             <a-button block size="small" @click="search()">重置</a-button>
           </a-col>
         </a-row>
-        </div>
         <a-icon
           slot="filterIcon"
           type="search"
@@ -44,10 +43,18 @@
       </a-row>
       <a-row v-if="form.role !== 'master'" :gutter="[20, 20]">
         <a-col :span="6">
-          <a-tag class="modal-tag">权限列表</a-tag>
+          <a-tag class="modal-tag">操作权限</a-tag>
         </a-col>
         <a-col :span="18">
           <a-checkbox-group v-model="roleList" :options="platformList" @change="roleChange" />
+        </a-col>
+      </a-row>
+      <a-row v-if="form.role !== 'master'" :gutter="[20, 20]">
+        <a-col :span="6">
+          <a-tag class="modal-tag">只读权限</a-tag>
+        </a-col>
+        <a-col :span="18">
+          <a-checkbox-group v-model="roleList" :options="platformListReadOnly" @change="roleChange" />
         </a-col>
       </a-row>
     </a-modal>
@@ -90,6 +97,12 @@ export default {
     platformList() {
       const list = ['PCW', 'PCA', 'PHW']
       return this.role === 'master' ? list : list.filter(item => this.role.split(',').includes(item))
+    },
+    platformListReadOnly() {
+      return this.platformList.map(item => ({
+        label: item,
+        value: `${item}_READONLY`
+      }))
     }
   },
   methods: {

@@ -5,7 +5,7 @@
     :zIndex="20"
     :visible="visible"
     :body-style="{ paddingBottom: '80px', scrollX: 'auto' }"
-    @close="$emit('closeDrawer')"
+    @close="close"
   >
     <div v-if="showHistory" class="mask" />
     <a-form-model
@@ -33,6 +33,7 @@
           />
           <a-input
             v-model="form._id"
+            @blur="() => form._id = (form._id || '').trim()"
             placeholder="请输入模块ID自定义部分"
             style="width: 40%;"
           />
@@ -79,6 +80,7 @@
           <a-input
             v-if="form.gray.type !== 'NONE'"
             v-model="form.gray._id"
+            @blur="() => form.gray._id = (form.gray._id || '').trim()"
             placeholder="请输入灰度参数字段"
             style="width: calc(100% - 130px);"
           />
@@ -128,11 +130,23 @@
           >
             <a-row :gutter="[50, 20]">
               <a-col :span="12">
-                <a-input addon-before="Block ID" v-model="item._id" size="small" class="tip-item" />
+                <a-input
+                  addon-before="Block ID"
+                  v-model="item._id"
+                  @blur="() => item._id = (item._id || '').trim()"
+                  size="small"
+                  class="tip-item"
+                />
                 <common-tip class="ml-16" title="用于投递统计的区块ID" />
               </a-col>
               <a-col :span="12">
-                <a-input v-if="form.gray.type !== 'NONE'" addon-before="灰度值" v-model="item.gray" size="small" />
+                <a-input
+                  v-if="form.gray.type !== 'NONE'"
+                  addon-before="灰度值"
+                  v-model="item.gray"
+                  @blur="() => item.gray = (item.gray || '').trim()"
+                  size="small"
+                />
               </a-col>
             </a-row>
             <!-- API列表 -->
@@ -141,10 +155,18 @@
               :key="`${apiItem._id}-${apiIndex}`"
             >
               <a-divider orientation="left">
-                {{ `数据源 - ${apiItem.name || (apiItem.base || {}).name || '请选择'}` }}
+                <a-icon
+                  style="margin-right: 10px;"
+                  :type="apiHide[`${apiItem._id}-${apiIndex}`] ? 'caret-right' : 'caret-down'"
+                  @click="toggle(`${apiItem._id}-${apiIndex}`)"
+                />
+                <span
+                  @click="toggle(`${apiItem._id}-${apiIndex}`)"
+                  style="cursor: pointer;"
+                >{{ `数据源 - ${apiItem.name || (apiItem.base || {}).name || '请选择'}` }}</span>
               </a-divider>
               <!-- API选择框 -->
-              <a-row :gutter="[5, 10]" align="middle">
+              <a-row :gutter="[5, 10]" align="middle" v-show="!apiHide[`${apiItem._id}-${apiIndex}`]">
                 <a-col :span="4">
                   <a-tag class="center-100 height-24"><b>数据源</b></a-tag>
                 </a-col>
@@ -157,7 +179,7 @@
                     @focus="apiFocus(apiItem)"
                   >
                     <a-select-option
-                      v-for="(a, i) in getListApiOption(index, apiIndex)"
+                      v-for="(a, i) in getListApiOption(item.api, apiIndex, index)"
                       :key="i"
                       :value="`${index}-${apiIndex}_${a._id}${a.base ? '_default' : ''}`"
                     >{{ apiTitle(a) }}</a-select-option>
@@ -165,7 +187,7 @@
                 </a-col>
                 <a-col :span="2" class="right">
                   <a-icon
-                    v-if="apiIndex"
+                    v-if="item.api.length > 1"
                     type="minus-circle"
                     style="font-size: 18px;"
                     @click="deleteItem(item.api, apiIndex)"
@@ -174,7 +196,7 @@
                 </a-col>
               </a-row>
               <!-- API配置 -->
-              <a-row v-if="apiItem._id" :gutter="[5, 10]">
+              <a-row v-if="apiItem._id" :gutter="[5, 10]" v-show="!apiHide[`${apiItem._id}-${apiIndex}`]">
                 <!-- 请求条件 -->
                 <a-col :span="4">
                   <a-tag class="center-100 height-24"><b>请求条件</b></a-tag>
@@ -204,74 +226,169 @@
                   <common-tip title="数据源接口报错时，整个模块的数据链路是否阻塞/报错" />
                 </a-col>
                 <!-- Headers -->
-                <!-- <a-col :span="4">
-                  <a-tag class="center-100 height-24"><b>Headers</b></a-tag>
-                </a-col>
-                <a-col :span="18">
-                  <common-form-item-params
-                    :list="apiItem.headers"
-                    :api-item="apiItem"
-                    @addItem="addItem"
-                    @deleteItem="deleteItem"
-                  />
-                </a-col>
-                <a-col :span="2" class="right">
-                  <common-tip title="接口请求中的请求头数据" />
-                </a-col> -->
+                <common-form-item-params
+                  label="Headers"
+                  tip="接口请求中的请求头数据"
+                  :required="true"
+                  :span="18"
+                  :list="apiItem.headers"
+                  :api-item="apiItem"
+                  :api="item.api"
+                  @addItem="addItem"
+                  @deleteItem="deleteItem"
+                />
                 <!-- 参数列表 -->
-                <a-col :span="4">
-                  <a-tag class="center-100 height-24"><b>URL参数</b></a-tag>
-                </a-col>
-                <a-col :span="18">
-                  <common-form-item-params
-                    :list="apiItem.params"
-                    :api-item="apiItem"
-                    :api="item.api"
-                    @addItem="addItem"
-                    @deleteItem="deleteItem"
-                  />
-                </a-col>
-                <a-col :span="2" class="right">
-                  <common-tip title="GET/POST请求中的URL参数" />
-                </a-col>
+                <common-form-item-params
+                  label="URL参数"
+                  tip="GET/POST请求中的URL参数"
+                  :required="true"
+                  :span="18"
+                  :list="apiItem.params"
+                  :api-item="apiItem"
+                  :api="item.api"
+                  @addItem="addItem"
+                  @deleteItem="deleteItem"
+                />
                 <!-- Post Body -->
-                <a-col :span="4" v-if="(apiItem.base || {}).method === 'POST'">
-                  <a-tag class="center-100 height-24"><b>Post Body</b></a-tag>
-                </a-col>
-                <a-col :span="18" v-if="(apiItem.base || {}).method === 'POST'">
-                  <common-form-item-params
-                    :list="apiItem.body"
-                    :api-item="apiItem"
-                    :api="item.api"
-                    @addItem="addItem"
-                    @deleteItem="deleteItem"
-                  />
-                </a-col>
-                <a-col :span="2" class="right" v-if="(apiItem.base || {}).method === 'POST'">
-                  <common-tip title="POST请求中的请求Body数据" />
-                </a-col>
-                <!-- 基础数据key配置 -->
+                <common-form-item-params
+                  v-if="(apiItem.base || apiItem).method === 'POST'"
+                  label="Post Body"
+                  tip="POST请求中的请求Body数据"
+                  :required="true"
+                  :span="18"
+                  :list="apiItem.body"
+                  :api-item="apiItem"
+                  :api="item.api"
+                  @addItem="addItem"
+                  @deleteItem="deleteItem"
+                />
+                <!-- 奇谱key配置 -->
                 <a-col :span="4" class="mt-20">
-                  <a-tag class="center-100 height-24"><b>基础数据</b></a-tag>
+                  <a-tag class="center-100 height-24"><b>奇谱数据</b></a-tag>
                 </a-col>
-                <a-col :span="18" class="mt-20">
+                <a-col :span="18" class="mt-20 right">
                   <a-switch
                     checked-children="需要"
                     un-checked-children="不需要"
                     v-model="apiItem.hasQipu"
                   />
                 </a-col>
-                <a-col :span="13" v-if="apiItem.hasQipu">
-                  <a-input addon-before="实体ID-输入节点" v-model="apiItem.qipuIdKey" size="small" />
+                <a-col :span="2" class="right" style="margin-top: 23px;">
+                  <common-tip title="数据源数据中是否包含奇谱ID，以及是否获取对应的奇谱实体数据" />
                 </a-col>
-                <a-col :span="9" v-if="apiItem.hasQipu">
-                  <a-input addon-before="实体数据-输出字段" v-model="apiItem.qipuDataKey" size="small" />
+                <a-col :span="4" v-show="apiItem.hasQipu">
+                  <a-tag v-if="apiItem.qipuIdConst" class="center-100 height-24"><big>奇谱ID</big></a-tag>
+                  <query-popover
+                    v-else
+                    name="奇谱ID - 输入节点"
+                    map-key="qipuIdKey"
+                    :map-data="[apiItem]"
+                    :index="0"
+                    :api-data="apiItem"
+                    :sm="true"
+                  />
                 </a-col>
-                <a-col :span="2" v-if="apiItem.hasQipu" class="right">
-                  <common-tip title="实体ID-输入节点 -> 获取实体信息，实体数据-输出字段 -> 映射阶段的基础数据结构字段名" />
+                <a-col :span="13" style="height: 34px;" v-show="apiItem.hasQipu">
+                  <a-input
+                    v-model="apiItem.qipuIdKey"
+                    @blur="() => apiItem.qipuIdKey = (apiItem.qipuIdKey || '').trim()"
+                    size="small"
+                  />
+                </a-col>
+                <a-col :span="5" class="right" v-show="apiItem.hasQipu">
+                  <a-switch
+                    checked-children="自定义奇谱ID值"
+                    un-checked-children="奇谱ID数据节点"
+                    v-model="apiItem.qipuIdConst"
+                    @change="qipuIdConstChange(apiItem)"
+                  />
+                </a-col>
+                <a-col :span="2" v-show="apiItem.hasQipu" class="right">
+                  <common-tip title="奇谱ID-输入节点 -> 获取奇谱实体信息对应到数据源数据中奇谱ID的节点位置，支持可视化选取" />
+                </a-col>
+                <a-col :span="4" v-show="apiItem.hasQipu">
+                  <a-tag class="center-100 height-24"><big>奇谱数据 - 输出字段</big></a-tag>
+                </a-col>
+                <a-col :span="13" v-show="apiItem.hasQipu">
+                  <a-input
+                    v-model="apiItem.qipuDataKey"
+                    @blur="() => apiItem.qipuDataKey = (apiItem.qipuDataKey || '').trim()"
+                    size="small"
+                  />
+                </a-col>
+                <a-col :offset="1" :span="4" v-show="apiItem.hasQipu">
+                  <a-input-group compact>
+                    <a-tag class="group-tag">最大尺寸</a-tag>
+                    <a-input-number
+                      style="width: 50%;"
+                      size="small"
+                      :min="0"
+                      :formatter="value => value || '全部'"
+                      v-model="apiItem.qipuSize"
+                    />
+                  </a-input-group>
+                </a-col>
+                <a-col :span="2" v-show="apiItem.hasQipu" class="right">
+                  <common-tip title="最大尺寸 -> 获取奇谱实体信息的最大个数，奇谱数据-输出字段 -> 映射阶段的奇谱结构别名" />
+                </a-col>
+                <!-- 输出映射配置 -->
+                <a-col :span="4" class="mt-20">
+                  <a-tag class="center-100 height-24"><b>输出映射</b></a-tag>
+                </a-col>
+                <a-col :span="18" class="mt-20 right">
+                  <a-button
+                    :disabled="!apiItem.formater || !apiItem.formater.length"
+                    @click="$store.commit('updateNodeClip', apiItem.formater)"
+                    size="small"
+                    style="margin: 0 2.5px;"
+                  >一键复制</a-button>
+                  <a-button
+                    :disabled="!$store.state.nodeClip"
+                    @click="apiItem.formater = apiItem.formater.concat($store.state.nodeClip)"
+                    size="small"
+                    style="margin: 0 2.5px;"
+                  >一键粘贴</a-button>
+                  <!-- <a-switch checked-children="折叠" un-checked-children="平铺" v-model="formaterCollapse" /> -->
+                </a-col>
+                <a-col :span="2" class="right" style="margin-top: 23px;">
+                  <common-tip title="输出映射是否折叠成树状结构" />
                 </a-col>
                 <!-- Formater -->
-                <a-col :span="22" class="mt-20">
+                <a-col :span="22" v-if="formaterCollapse" @click="popupReady.api = false">
+                  <a-button
+                    v-if="formaterCollapse && apiItem.formater.length === 0"
+                    @click="addNode(false, false, apiItem)"
+                    type="dashed"
+                    icon="plus"
+                    size="small"
+                    block
+                  >添加映射节点</a-button>
+                  <a-dropdown :trigger="['contextmenu']" :visible="popupReady.api === apiIndex">
+                    <a-tree
+                      :default-expand-all="true"
+                      :show-line="true"
+                      :tree-data="apiItem.formater"
+                      :replace-fields="{ key: 'id', title: 'key' }"
+                      @select="(selected, v) => onSelect(selected, v, apiItem)"
+                      @rightClick="(v) => onRightClick('api', v, apiItem, apiIndex)"
+                    ></a-tree>
+                    <a-menu slot="overlay" @click="popupReady.api = false">
+                      <a-menu-item @click="isEdit = true">编辑</a-menu-item>
+                      <a-menu-item @click="$store.commit('updateNodeClip', editNode.dataRef)">一键复制</a-menu-item>
+                      <a-menu-item
+                        v-if="$store.state.nodeClip"
+                        @click="addNode($store.state.nodeClip)"
+                      >一键粘贴</a-menu-item>
+                      <a-menu-item
+                        v-if="editNode.dataRef && editNode.dataRef.type.includes('Parent')"
+                        @click="addNode(false, true)"
+                      >添加子级节点</a-menu-item>
+                      <a-menu-item @click="addNode()">添加节点</a-menu-item>
+                      <a-menu-item @click="deleteNode()">删除节点</a-menu-item>
+                    </a-menu>
+                  </a-dropdown>
+                </a-col>
+                <!-- <a-col :span="22" v-else>
                   <common-child-tree
                     v-for="(f, fIndex) in apiItem.formater"
                     v-slot="childProps"
@@ -280,224 +397,26 @@
                     :data-index="fIndex"
                     :parent-array="apiItem.formater"
                     :add-function="addItem"
-                    :add-blank="{
-                      type: 'String',
-                      mapping: [{ type: 'KEY', required: [], kv2v: {} }],
-                      sort: {},
-                      a2o: {},
-                      children: []
-                    }"
+                    :add-blank="formatItemBlank"
                     row-style="margin-bottom: 10px;"
                   >
-                    <!-- 映射 - 输出 -->
-                    <a-card-meta style="padding: 12px; height: auto;">
-                      <!-- 映射 - 输出 - 基本配置 -->
-                      <a-row slot="title">
-                        <a-col :span="4">
-                          <a-tag class="width-90 center"><b>输出字段</b></a-tag>
-                        </a-col>
-                        <a-col :span="19">
-                          <a-input-group compact size="small">
-                            <a-select
-                              v-model="childProps.data.type"
-                              :options="[
-                                { key: 'String', title: '字符串' },
-                                { key: 'Number', title: '数字' },
-                                { key: 'Boolean', title: '布尔值' },
-                                { key: 'Object', title: '对象' },
-                                { key: 'Array', title: '数组' },
-                                { key: 'A2O', title: '数组->对象' },
-                                { key: 'Parent-O', title: '父级对象' },
-                                { key: 'Parent-A', title: '父级数组' },
-                                { key: 'Parent-A2O', title: '父级数组->对象' }
-                              ]"
-                              placeholder="String"
-                              default-value="asc"
-                              size="small"
-                              style="width: 210px;"
-                            />
-                            <a-input
-                              v-model="childProps.data.key"
-                              size="small"
-                              style="text-align: right; width: calc(100% - 210px);"
-                            />
-                          </a-input-group>
-                        </a-col>
-                        <a-col :span="1" class="right">
-                          <a-icon
-                            type="delete"
-                            theme="twoTone"
-                            style="font-size: 18px;"
-                            @click="deleteItem(childProps.parentArray, childProps.index)"
-                          />
-                        </a-col>
-                      </a-row>
-                      <!-- 映射 - 输出 - 数组转对象数据配置 -->
-                      <a-row slot="description" v-if="childProps.data.type.includes('A2O')">
-                        <a-col :span="7" :offset="4">
-                          <a-input
-                            v-model="childProps.data.a2o.key"
-                            addon-before="Key"
-                            size="small"
-                            style="text-align: right; width: 210px;"
-                          />
-                        </a-col>
-                        <a-col :span="12">
-                          <a-input
-                            v-model="childProps.data.a2o.value"
-                            addon-before="Value"
-                            size="small"
-                            style="text-align: right;"
-                          />
-                        </a-col>
-                      </a-row>
-                      <!-- 映射 - 输出 - 数组数据配置 -->
-                      <a-row slot="description" v-if="['Array', 'Parent-A'].includes(childProps.data.type)">
-                        <a-col :span="19" :offset="4">
-                          <a-input-group compact size="small" style="width: 210px;">
-                            <a-select
-                              v-model="childProps.data.sort.order"
-                              :options="[
-                                { key: 'asc', title: '升序' },
-                                { key: 'desc', title: '降序' }
-                              ]"
-                              placeholder="类型"
-                              default-value="asc"
-                              size="small"
-                              style="width: 35%;"
-                            />
-                            <a-input
-                              v-model="childProps.data.sort.key"
-                              placeholder="排序字段"
-                              style="width: 65%; text-align: right;"
-                            />
-                          </a-input-group>
-                          <a-input-group style="width: calc(100% - 210px); text-align: right;">
-                            <a-input-number
-                              style="width: 30%;"
-                              size="small"
-                              :formatter="val => `起始位置:  ${val || 0}`"
-                              :min="0"
-                              v-model="childProps.data.startIndex"
-                            />
-                            <a-input-number
-                              style="margin-left: 2px; width: 30%;"
-                              size="small"
-                              :formatter="val => `尺寸:  ${val || 0}`"
-                              :min="0"
-                              v-model="childProps.data.size"
-                            />
-                            <a-input-number
-                              style="margin-left: calc(5% - 1px); width: 30%;"
-                              size="small"
-                              :formatter="val => `序号:  ${val || 0}`"
-                              :min="0"
-                              v-model="childProps.data.order"
-                            />
-                          </a-input-group>
-                        </a-col>
-                        <a-col :span="1" class="right height-24">
-                          <common-tip title="当输出节点由多个数据源数据字段组成，该序号用于排序不同的数据源" />
-                        </a-col>
-                      </a-row>
-                    </a-card-meta>
-                    <!-- 映射 - 输入 -->
-                    <a-card-grid
-                      v-for="(mapItem, mapIndex) in childProps.data.mapping"
+                    <mapping-out :editNode="childProps.data" />
+                    <mapping-in
+                      v-for="(mapItem, mapIndex) in (childProps.data.mapping || [])"
                       :key="mapIndex"
-                      style="width: 100%; padding: 12px;"
-                    >
-                      <a-col :span="4">
-                        <a-tag class="width-90 center"><b>输入 - {{ mapIndex + 1 }}</b></a-tag>
-                      </a-col>
-                      <a-col :span="19">
-                        <a-input-group compact size="small">
-                          <a-select
-                            v-model="mapItem.type"
-                            default-value="KEY"
-                            :options="[
-                              { key: 'KEY', title: '输入节点' },
-                              { key: 'VALUE', title: '输入常量' },
-                              { key: 'KV2V', title: '输入KV节点' },
-                              { key: 'RULE', title: '输入规则' },
-                            ]"
-                            :style="`width: ${mapIndex ? 140 : 210}px;`"
-                            placeholder="输入节点"
-                            size="small"
-                          />
-                          <a-select
-                            v-if="mapIndex"
-                            v-model="mapItem.operation"
-                            :options="[
-                              { key: '', title: '或' },
-                              { key: '+', title: '加' },
-                              { key: '-', title: '减' },
-                              { key: '*', title: '乘' },
-                              { key: '/', title: '除' },
-                            ]"
-                            placeholder="或"
-                            size="small"
-                            style="width: 70px;"
-                          />
-                          <a-input
-                            v-model="mapItem.value"
-                            style="width: calc(100% - 210px); text-align: right;"
-                          />
-                        </a-input-group>
-                      </a-col>
-                      <a-col :span="1" class="right">
-                        <a-icon
-                          v-if="mapIndex"
-                          type="minus-circle"
-                          theme="twoTone"
-                          style="font-size: 18px;"
-                          @click="deleteItem(childProps.data.mapping, mapIndex)"
-                        />
-                        <a-icon
-                          v-else
-                          type="plus-circle"
-                          theme="twoTone"
-                          style="font-size: 18px;"
-                          @click="addItem(childProps.data.mapping, { type: 'KEY', required: [], kv2v: {} }, true)"
-                        />
-                      </a-col>
-                      <a-col v-if="mapItem.type === 'KV2V'" :span="19" :offset="4" class="mt-10">
-                        <a-input
-                          v-model="mapItem.kv2v.key"
-                          addon-before="Key"
-                          size="small"
-                          style="text-align: right; width: 20%; margin-right: 5%;"
-                        />
-                        <a-input
-                          v-model="mapItem.kv2v.keyName"
-                          addon-before="Key-Name"
-                          size="small"
-                          style="text-align: right; width: 50%; margin-right: 5%;"
-                        />
-                        <a-input
-                          v-model="mapItem.kv2v.value"
-                          addon-before="Value"
-                          size="small"
-                          style="text-align: right; width: 20%;"
-                        />
-                      </a-col>
-                      <a-col v-else :span="19" :offset="4" class="mt-10">
-                        <required title="约束条件" :required="mapItem.required" />
-                      </a-col>
-                      <a-col v-if="mapItem.type === 'KV2V'" :span="1" class="mt-10 right">
-                        <common-tip title="将KV数组中的某个Value属性直接输出，如：[{ name: 'a', value: '1', name: 'b', value: '2' }] 输出 name等于b的value（2）" />
-                      </a-col>
-                      <a-col v-else :span="1" class="mt-20 right">
-                        <common-tip title="约束条件用于控制是否使用该输入逻辑，若不满足下述条件，则进入下一个输入映射逻辑" />
-                      </a-col>
-                    </a-card-grid>
+                      :index="mapIndex"
+                      :map-data="childProps.data.mapping"
+                      :map-type="childProps.data.type"
+                      :api-data="apiItem"
+                      :parent-input="editParentInput"
+                    />
                   </common-child-tree>
                   <a-button
                     @click="addItem(apiItem.formater, {
                       type: 'String',
-                      mapping: [{ type: 'KEY', required: [], kv2v: {} }],
+                      mapping: [{ type: 'KEY', required: [], kv2v: {}, link: {} }],
                       sort: {},
-                      a2o: {},
+                      a2o: { required: [] },
                       children: []
                     }, true)"
                     type="dashed"
@@ -505,12 +424,11 @@
                     size="small"
                     block
                   >添加映射节点</a-button>
-                </a-col>
-                <a-col :span="2" class="mt-20 right">
-                  <common-tip title="模块输出数据的字段映射规则" />
-                </a-col>
+                </a-col> -->
               </a-row>
-              <a-divider orientation="right"><a-icon type="caret-up" /></a-divider>
+              <a-divider orientation="right">
+                <a-icon :type="apiHide[`${apiItem._id}-${apiIndex}`] ? 'caret-left' : 'caret-up'" />
+              </a-divider>
             </a-row>
             <a-button
               type="dashed"
@@ -519,6 +437,93 @@
               block
               @click="addItem(item.api, { _id: '', required: [], level: 'error', formater: [] })"
             >添加数据源</a-button>
+            <a-divider orientation="left">
+              <a-icon
+                style="margin-right: 10px;"
+                :type="apiHide.formater ? 'caret-right' : 'caret-down'"
+                @click="toggle('formater')"
+              />
+              <span @click="toggle('formater')" style="cursor: pointer;">输出数据处理</span>
+            </a-divider>
+            <a-row :gutter="[5, 10]" v-show="!apiHide.formater">
+              <a-col :span="4">
+                <a-tag class="center-100 height-24"><b>数据处理</b></a-tag>
+              </a-col>
+              <a-col :span="18">
+                <a-button
+                  v-if="item.formater.length === 0"
+                  @click="addNode(false, false, item)"
+                  type="dashed"
+                  icon="plus"
+                  size="small"
+                  style="width: calc(100% - 160px);"
+                >添加处理节点</a-button>
+                <a-button
+                  :disabled="!$store.state.extraClip"
+                  @click="item.formater = item.formater.concat($store.state.extraClip)"
+                  size="small"
+                  style="margin-left: 5px; float: right;"
+                >一键粘贴</a-button>
+                <a-button
+                  :disabled="!item.formater || !item.formater.length"
+                  @click="$store.commit('updateExtraClip', item.formater)"
+                  size="small"
+                  style="margin-left: 5px; float: right;"
+                >一键复制</a-button>
+              </a-col>
+              <a-col :span="2" class="right">
+                <common-tip title="处理映射后的融合数据" />
+              </a-col>
+              <a-col :span="22" @click="popupReady.formater = false">
+                <a-dropdown :trigger="['contextmenu']" :visible="popupReady.formater">
+                  <a-tree
+                    :default-expand-all="true"
+                    :show-line="true"
+                    :tree-data="item.formater"
+                    :replace-fields="{ key: 'id', title: 'key' }"
+                    @select="(selected, v) => onSelect(selected, v, item)"
+                    @rightClick="(v) => onRightClick('formater', v, item)"
+                  ></a-tree>
+                  <a-menu slot="overlay" @click="popupReady.formater = false">
+                    <a-menu-item @click="isEdit = true">编辑</a-menu-item>
+                    <a-menu-item @click="$store.commit('updateExtraClip', editNode.dataRef)">一键复制</a-menu-item>
+                    <a-menu-item
+                      v-if="$store.state.extraClip"
+                      @click="addNode($store.state.extraClip)"
+                    >一键粘贴</a-menu-item>
+                    <a-menu-item
+                      v-if="editNode.dataRef && editNode.dataRef.type.includes('Parent')"
+                      @click="addNode(false, true)"
+                    >添加子级节点</a-menu-item>
+                    <a-menu-item @click="addNode()">添加节点</a-menu-item>
+                    <a-menu-item @click="deleteNode()">删除节点</a-menu-item>
+                  </a-menu>
+                </a-dropdown>
+              </a-col>
+              <a-col :span="4">
+                <query-popover
+                  name="数据清扫"
+                  :map-data="item.deleter"
+                  map-type="Deleter"
+                  :api-data="item"
+                  :sm="true"
+                />
+              </a-col>
+              <a-col :span="18">
+                <a-select
+                  v-model="item.deleter"
+                  :token-separators="[',']"
+                  mode="tags"
+                  size="small"
+                />
+              </a-col>
+              <a-col :span="2" class="right">
+                <common-tip title="去除无用的数据节点" />
+              </a-col>
+            </a-row>
+            <a-divider orientation="right">
+              <a-icon :type="apiHide.formater ? 'caret-left' : 'caret-up'" />
+            </a-divider>
             <a-icon v-if="index" slot="extra" type="delete" @click="deleteItem(form.list, index)" />
           </a-collapse-panel>
         </a-collapse>
@@ -537,7 +542,13 @@
       justify="center"
       class="drawer-bottom"
     >
-      <a-button class="drawer-bottom-btn" @click="$emit('closeDrawer')">取消</a-button>
+      <a-button
+        class="drawer-bottom-btn"
+        type="primary"
+        @click="validate(true)"
+        :loading="publishing"
+      >测试环境部署</a-button>
+      <a-button class="drawer-bottom-btn" @click="close">取消</a-button>
       <preview
         :id="form._id"
         :env="showHistory ? 'ex' : 'preview'"
@@ -546,12 +557,35 @@
         @preview="(id, env, gray) => $emit('preview', id, env, gray)"
       />
       <a-button
+        v-if="!readOnly"
         class="drawer-bottom-btn"
         type="primary"
-        @click="validate"
+        @click="validate()"
         :loading="publishing"
       >{{ showHistory ? '回滚' : '提交' }}</a-button>
     </a-row>
+    <a-modal v-model="isEdit" :width="1080" :zIndex="50" :closable="false" :footer="false">
+      <a-card
+        :body-style="{ fontSize: '14px', margin: '-1px 0 0 -1px', padding: '0' }"
+        size="small"
+        hoverable
+        bordered
+      >
+        <!-- 映射 - 输出 -->
+        <mapping-out :editNode="editNode.dataRef" :api-data="editApi" />
+        <!-- 映射 - 输入 -->
+        <mapping-in
+          v-for="(mapItem, mapIndex) in nodeDataMapping"
+          :key="mapIndex"
+          :index="mapIndex"
+          :map-data="nodeDataMapping"
+          :map-type="(editNode.dataRef || {}).type"
+          :map-sort="(editNode.dataRef || {}).sort"
+          :api-data="editApi"
+          :parent-input="editParentInput"
+        />
+      </a-card>
+    </a-modal>
   </a-drawer>
 </template>
 
@@ -559,41 +593,25 @@
 import CommonTip from '../common/tip'
 import CommonChildTree from '../common/childTree'
 import CommonFormItemParams from '../common/formItemParams'
+import QueryPopover from '../block/queryPopover'
 import Preview from '../block/preview'
 import Required from '../block/required'
+import MappingOut from '../block/mappingOut'
+import MappingIn from '../block/mappingIn'
 import { http } from '../../utils/http'
 import { prefix, suffix } from '../../utils/block'
+import { addItem, deleteItem, copyItem } from '../../utils/tool'
 
-let mockData = [{
-  "_id":"testApi",
-  "name":"测试数据",
-  "url":"http://xxx.xxx.xxx",
-  "qipuIdKey":"data.items.id",
-  "qipuDataKey":"QIPU",
-  "editor":"jiayanqi",
-  "update_time":new Date(),
-  "create_time":new Date(),
-  "body":[],
-  "params":[{
-    "_id":"size",
-    "default":"50",
-    "type":"KV"
-  }],
-  "headers":[],
-  "cache":{
-    "time":0,
-    "key":[]
-  },
-  "method":"GET",
-  "timeout":3000
-}]
-const domain = 'xxx'
+const domain = 'localhost:3000/strategy'
 
 export default {
   name: 'formDrawer',
   components: {
+    QueryPopover,
     Required,
     Preview,
+    MappingOut,
+    MappingIn,
     CommonTip,
     CommonChildTree,
     CommonFormItemParams
@@ -643,13 +661,35 @@ export default {
       prefix,
       suffix,
       api: [],
+      formerApi: [],
       apiObj: {},
+      apiHide: {},
+      formatItemBlank: {
+        type: 'String',
+        key: '',
+        mapping: [{ value: '', type: 'KEY', operation: '', required: [], kv2v: {}, link: {} }],
+        sort: {},
+        dup: {},
+        a2o: { required: [] },
+        children: []
+      },
       rules: {
         _id: [{ validator: validateId, trigger: ['change', 'blur'] }],
         name: [{ required: true, message: '请填写模块名称', trigger: ['change', 'blur'] }],
         gray: [{ required: true, message: '请填写灰度规则', trigger: ['change', 'blur'] }],
         list: [{ validator: validateList, trigger: ['change', 'blur'] }]
-      }
+      },
+      formaterCollapse: true,
+      popupReady: {
+        api: false,
+        formater: false
+      },
+      isEdit: false,
+      editChildren: [],
+      editNode: {},
+      editIndex: 0,
+      editParentInput: [],
+      editApi: {}
     }
   },
   mounted() {
@@ -658,52 +698,56 @@ export default {
   watch: {
     $route(to) {
       this.getApi()
+    },
+    isEdit(val) {
+      if (!val) {
+        this.$store.commit('updateInitTree', [])
+      }
     }
   },
   computed: {
     platform() {
       return this.$route.params.platform
     },
+    readOnly() {
+      const role = (this.$store.state.user.role || '').split(',')
+      const curPt = role.find(item => item.replace(/_READONLY$/, '') === (this.platform || '').toUpperCase())
+      return /_READONLY$/.test(curPt || '')
+    },
     cacheKeyOptions() {
       let result = [];
-      this.form.list.map(item => item.api.map(api => (api.params || []).map(param => {
-        if (param.type === 'INPUT' && param._id && !result.includes(param._id)) {
+      this.form.list.map(item => item.api.map(api => (api.params || []).concat(api.body || []).map(param => {
+        if (['INPUT', 'APPEND'].includes(param.type) && param._id && !result.includes(param._id)) {
           result.push(param._id)
         }
       })))
       return result.map(v => ({ key: v, title: v }));
+    },
+    nodeDataMapping() {
+      return (this.editNode.dataRef || {}).mapping || [];
     }
   },
   methods: {
+    addItem,
+    deleteItem,
     async getApi() {
-      // MOCK注释
-      // this.api = (await http(`//${domain}/${this.platform}/interface`, {
-      //   defaultData: []
-      // })).map(item => {
-      //   this.apiObj[item._id] = item
-      //   item.hasQipu = !!item.qipuIdKey
-      //   return item
-      // })
-      this.api = mockData.map(item => {
+      this.api = (await http(`//${domain}/${this.platform}/interface`, {
+        defaultData: [],
+        params: {
+          size: 200
+        }
+      })).map(item => {
         this.apiObj[item._id] = item
         item.hasQipu = !!item.qipuIdKey
         return item
       })
     },
-    addItem(arr, initItem = {}, noLimit = false) {
-      if (noLimit || arr.length === 0 || arr[arr.length - 1]._id) {
-        arr.push(initItem)
-      } else {
-        this.$message.warning('请完成前述空项的填写！')
-      }
-    },
-    deleteItem(arr, index) {
-      arr.splice(index, 1)
-    },
-    validate() {
+    validate(isTest) {
       this.$refs.ruleForm.validate(valid => {
         if (valid) {
-          if (this.form.isOnline) {
+          if (isTest) {
+            this.$emit('postBlock', { isTest })
+          } else if (this.form.isOnline) {
             this.$emit('showConfirm')
           } else {
             this.$emit('postBlock')
@@ -747,9 +791,88 @@ export default {
       return type === 'NONE' ? '全量' : (val ? val : '暂无')
     },
     // 获取全部数据源选择列表
-    getListApiOption(listIndex, apiIndex) {
-      const currentApi = this.block._id ? ((this.block.list[listIndex] || {}).api || {})[apiIndex] : null
-      return (currentApi ? [currentApi] : []).concat(this.api)
+    getListApiOption(apiList, apiIndex, listIndex) {
+      const currentApi = apiList[apiIndex] || {};
+      if (!this.formerApi[listIndex]) {
+        this.formerApi[listIndex] = []
+      }
+      // 去除多余记忆数据源
+      this.formerApi[listIndex] = this.formerApi[listIndex].slice(0, apiList.length)
+      // 位置发生变化时，更改记忆数据源
+      if (currentApi.base) {
+        this.formerApi[listIndex][apiIndex] = currentApi
+      }
+      return (this.formerApi[listIndex][apiIndex] ? [this.formerApi[listIndex][apiIndex]] : []).concat(this.api)
+    },
+    onSelect(selected, item, apiItem) {
+      if (apiItem.api) {
+        item.node.dataRef.isFormater = true
+      }
+      this.isEdit = true
+      this.editApi = apiItem
+      this.editNode = item.node
+      const { dataRef } = item.node.$parent || {}
+      if (dataRef && dataRef.type.includes('Parent')) {
+        this.editParentInput = dataRef.mapping.map(item => item.value.replace(/\[\d+\]/g, '[*]'))
+      } else {
+        this.editParentInput = []
+      }
+    },
+    onRightClick(type, item, apiItem, apiIndex) {
+      this.popupReady[type] = type === 'api' ? apiIndex : true
+      const { dataRef = {}, treeData = [] } = item.node.$parent || {}
+      if ((dataRef.type || '').includes('Parent')) {
+        this.editParentInput = dataRef.mapping.map(item => item.value.replace(/\[\d+\]/g, '[*]'))
+      } else {
+        this.editParentInput = []
+      }
+      if (apiItem.api) {
+        item.node.dataRef.isFormater = true
+      }
+      this.editChildren = dataRef.children || apiItem.formater
+      this.editApi = apiItem
+      this.editNode = item.node
+      this.editIndex = parseInt((this.editNode.pos || '').split('-').pop()) || 0
+    },
+    addNode(clip, addChild, apiItem) {
+      const addItem = copyItem(clip || this.formatItemBlank)
+      if (apiItem) {
+        if (apiItem.api) {
+          addItem.isFormater = true
+        }
+        this.editApi = apiItem
+        this.editApi.formater.push(addItem)
+      } else if (addChild) {
+        const { children, mapping } = this.editNode.dataRef;
+        this.editParentInput = mapping.map(item => item.value.replace(/\[\d+\]/g, '[*]'))
+        children.push(addItem)
+      } else {
+        this.editChildren.splice(this.editIndex + 1, 0, addItem)
+      }
+      this.editNode = { dataRef: addItem }
+      this.isEdit = true
+      this.popupReady.api = false
+      this.popupReady.formater = false
+    },
+    deleteNode() {
+      this.editChildren.splice(this.editIndex, 1)
+    },
+    toggle(key) {
+      this.apiHide = { ...this.apiHide, [key]: !this.apiHide[key] }
+    },
+    close() {
+      this.popupReady.api = false
+      this.popupReady.formater = false
+      this.$emit('closeDrawer')
+    },
+    qipuIdConstChange(apiItem) {
+      if (apiItem.qipuIdConst) {
+        apiItem.qipuIdKeyEx = apiItem.qipuIdKey
+        apiItem.qipuIdKey = apiItem.qipuIdValEx || ''
+      } else {
+        apiItem.qipuIdValEx = apiItem.qipuIdKey
+        apiItem.qipuIdKey = apiItem.qipuIdKeyEx || ''
+      }
     }
   }
 }
@@ -772,5 +895,12 @@ export default {
   height: 32px;
   line-height: 32px;
   font-size: 13px;
+}
+.group-tag {
+  text-align: center;
+  font-size: 14px;
+  padding-top: 1px;
+  width: 50%;
+  height: 24px;
 }
 </style>

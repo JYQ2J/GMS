@@ -115,8 +115,8 @@
       <span slot="history" slot-scope="text, record, index">
         <a @click="toggleHistory(record, index)">{{ (showHistory === index + 1) ? '已展开' : '展开' }}</a>
       </span>
-      <span slot="operate" slot-scope="text, record, index">
-        <a @click="editApi(record)">编辑</a>
+      <span slot="operate" slot-scope="text, record">
+        <a @click="editApi(record)">{{ readOnly ? '查看' : '编辑' }}</a>
       </span>
     </a-table>
     <form-drawer
@@ -138,30 +138,7 @@ import FormDrawer from '../components/api/formDrawer'
 import { http } from '../utils/http'
 import { copyItem } from '../utils/tool'
 
-let mockData = [{
-  "_id":"testApi",
-  "name":"测试数据",
-  "url":"http://xxx.xxx.xxx",
-  "qipuIdKey":"data.items.id",
-  "qipuDataKey":"QIPU",
-  "editor":"jiayanqi",
-  "update_time":new Date(),
-  "create_time":new Date(),
-  "body":[],
-  "params":[{
-    "_id":"size",
-    "default":"50",
-    "type":"KV"
-  }],
-  "headers":[],
-  "cache":{
-    "time":0,
-    "key":[]
-  },
-  "method":"GET",
-  "timeout":3000
-}]
-const domain = 'xxx'
+const domain = 'localhost:3000/strategy';
 
 const cacheBlank = {
   time: 0,
@@ -247,6 +224,11 @@ export default {
     },
     username() {
       return this.$store.state.user.name
+    },
+    readOnly() {
+      const role = (this.$store.state.user.role || '').split(',')
+      const curPt = role.find(item => item.replace(/_READONLY$/, '') === (this.platform || '').toUpperCase())
+      return /_READONLY$/.test(curPt || '')
     }
   },
   methods: {
@@ -283,13 +265,13 @@ export default {
         }
       })
     },
-    async postApi() {
-      const {
-        _id, name, url, timeout, method, cache, headers, params, body, multi, qipuIdKey, qipuDataKey
-      } = copyItem(this.form)
+    async postApi(opt = {}) {
+      const { _id, name, url, url_encode, content_type, timeout, method, cache, headers, params, body, multi, qipuIdKey, qipuDataKey } = copyItem(this.form)
       const data = {
         name,
         url,
+        url_encode,
+        content_type: method === 'POST' ? (content_type || 'FORM') : '',
         timeout,
         method,
         cache,
@@ -302,23 +284,35 @@ export default {
         editor: this.username
       }
       let response = {}
-      if (this.currentId) {
-        // MOCK注释
-        // response = await http(`//${domain}/${this.platform}/interface/${_id}`, {
-        //   method: 'POST',
-        //   data
-        // })
-        mockData = [{ _id, ...data }]
+      // let domain = opt.isTest ? '10.13.44.194' : 'domain'
+      if (opt.isTest) {
+        let testData = {}
+        if (this.currentId) {
+          testData = await http(`//${domain}/${this.platform}/interface?_id=${this.currentId}`)
+        }
+        if (testData[0]) {
+          response = await http(`//${domain}/${this.platform}/interface/${this.currentId}`, {
+            method: 'POST',
+            data
+          })
+        } else {
+          response = await http(`//${domain}/${this.platform}/interface`, {
+            method: 'POST',
+            data: { _id, ...data }
+          })
+        }
+      } else if (this.currentId) {
+        response = await http(`//${domain}/${this.platform}/interface/${_id}`, {
+          method: 'POST',
+          data
+        })
       } else {
-        // MOCK注释
-        // response = await http(`//${domain}/${this.platform}/interface`, {
-        //   method: 'POST',
-        //   data: { _id, ...data }
-        // })
-        mockData.push({ ...data, _id })
+        response = await http(`//${domain}/${this.platform}/interface`, {
+          method: 'POST',
+          data: { _id, ...data }
+        })
       }
-      // 请求成功
-      if (true) {
+      if (Object.keys(response).length) {
         this.$message.success('发布成功！')
         this.editing = false
         this.getData(this.apiParams)
@@ -339,19 +333,14 @@ export default {
     // 获取数据源列表
     async getData(params = {}) {
       this.loading = true
-
-      // MOCK注释
-      // this.total = await http(`//${domain}/${this.platform}/interface/count`, {
-      //   defaultData: 0,
-      //   params
-      // })
-      // this.list = await http(`//${domain}/${this.platform}/interface`, {
-      //   defaultData: [],
-      //   params
-      // })
-      this.total = mockData.length
-      this.list = mockData
-
+      this.total = await http(`//${domain}/${this.platform}/interface/count`, {
+        defaultData: 0,
+        params
+      })
+      this.list = await http(`//${domain}/${this.platform}/interface`, {
+        defaultData: [],
+        params
+      })
       this.handleTableData(this.list)
       this.apiParams = params
       this.loading = false
@@ -366,13 +355,9 @@ export default {
       } else {
         this.showHistory = index + 1
         this.loadingHistory = true
-
-        // MOCK注释
-        // this.history = await http(`//${domain}/${this.platform}/exInterface/${item._id}`, {
-        //   defaultData: []
-        // })
-        this.history = mockData
-
+        this.history = await http(`//${domain}/${this.platform}/exInterface/${item._id}`, {
+          defaultData: []
+        })
         this.handleTableData(this.history)
         this.loadingHistory = false
       }

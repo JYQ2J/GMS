@@ -18,16 +18,54 @@
       <a-form-model-item required label="接口ID" prop="_id">
         <a-input
           v-model="form._id"
+          @blur="() => form._id = (form._id || '').trim()"
           :disabled="!!currentId"
           placeholder="请输入标识接口的唯一ID，不能与已有的接口ID重复"
           class="tip-item"
         />
       </a-form-model-item>
       <a-form-model-item required label="接口名称" prop="name">
-        <a-input v-model="form.name" placeholder="请简述接口用途" class="tip-item" />
+        <a-input
+          v-model="form.name"
+          @blur="() => form.name = (form.name || '').trim()"
+          placeholder="请简述接口用途"
+          class="tip-item"
+        />
       </a-form-model-item>
       <a-form-model-item required label="接口地址" prop="url">
-        <a-input v-model="form.url" placeholder="请输入接口请求地址" class="tip-item" />
+        <a-input
+          v-model="form.url"
+          @blur="() => form.url = (form.url || '').trim()"
+          placeholder="请输入接口请求地址"
+          class="tip-item"
+        />
+      </a-form-model-item>
+      <a-form-model-item required label="请求方式" prop="method">
+        <a-input-group compact>
+          <a-select
+            v-model="form.method"
+            :options="[
+              { key: 'GET', title: 'GET' },
+              { key: 'POST', title: 'POST' },
+              { key: 'PCW-API', title: 'RPC in PCW-API' }
+            ]"
+            :style="`width: calc(${form.method === 'POST' ? '50% - 100px' : '100% - 200px'});`"
+          />
+          <a-select
+            v-if="form.method === 'POST'"
+            v-model="form.content_type"
+            :options="[
+              { key: 'FORM', title: 'multipart/form-data' },
+              { key: 'JSON', title: 'application/json' },
+              { key: 'NONE', title: 'application/x-www-form-urlencoded' }
+            ]"
+            placeholder="默认为：multipart/form-data"
+            style="width: calc(50% - 100px);"
+          />
+          <span class="ml-24">
+            URL Encode：<a-switch checked-children="开" un-checked-children="关" v-model="form.url_encode"/>
+          </span>
+        </a-input-group>
       </a-form-model-item>
       <a-form-model-item required label="超时时间" prop="timeout">
         <a-input-number
@@ -35,17 +73,6 @@
           v-model="form.timeout"
           placeholder="请输入接口超时时间/ms"
           class="tip-item"
-        />
-      </a-form-model-item>
-      <a-form-model-item required label="请求方式" prop="method">
-        <a-select
-          v-model="form.method"
-          :options="[
-            { key: 'GET', title: 'GET' },
-            { key: 'POST', title: 'POST' }
-          ]"
-          placeholder="请输入接口请求方式"
-          style="width: calc(100% - 36px);"
         />
       </a-form-model-item>
       <a-form-model-item label="缓存策略" prop="timeout">
@@ -67,43 +94,48 @@
       </a-form-model-item>
       <a-form-model-item label="Headers" prop="params">
         <common-form-item-params
+          tip="接口请求中的请求头数据"
           btn-class="tip-item"
           :list="form.headers"
           @addItem="addItem"
           @deleteItem="deleteItem"
-        ><common-tip class="ml-16" slot="tip" title="接口请求中的请求头数据" /></common-form-item-params>
+        />
       </a-form-model-item>
       <a-form-model-item label="URL Params" prop="params">
         <common-form-item-params
+          tip="GET/POST请求中的URL参数"
           btn-class="tip-item"
           :list="form.params"
           @addItem="addItem"
           @deleteItem="deleteItem"
-        ><common-tip class="ml-16" slot="tip" title="GET/POST请求中的URL参数" /></common-form-item-params>
+        />
       </a-form-model-item>
       <a-form-model-item v-if="form.method === 'POST'" label="Post Body" prop="params">
         <common-form-item-params
+          tip="POST请求中的请求Body数据"
           btn-class="tip-item"
           :list="form.body"
           @addItem="addItem"
           @deleteItem="deleteItem"
-        ><common-tip class="ml-16" slot="tip" title="POST请求中的请求Body数据" /></common-form-item-params>
+        />
       </a-form-model-item>
-      <a-form-model-item label="基础数据">
+      <a-form-model-item label="奇谱数据">
         <a-input
-          addon-before="实体ID-输入节点"
-          placeholder="请输入数据源接口中对应的实体ID字段节点映射"
+          addon-before="奇谱ID-输入节点"
+          placeholder="请输入数据源接口中对应的奇谱ID字段节点映射"
           style="width: calc(60% - 36px);"
           v-model="form.qipuIdKey"
+          @blur="() => form.qipuIdKey = (form.qipuIdKey || '').trim()"
         />
-        <common-tip class="ml-16" title="实体ID字段节点映射可以为多维数组中的节点，数组节点请在上方填写" />
+        <common-tip class="ml-16" title="奇谱ID字段节点映射可以为多维数组中的节点，数组节点请在上方填写" />
         <a-input
           addon-before="输出字段"
-          placeholder="请输入实体结构输出的字段名"
+          placeholder="请输入奇谱结构输出的字段名"
           style="width: calc(35% - 36px); margin-left: 5%"
           v-model="form.qipuDataKey"
+          @blur="() => form.qipuDataKey = (form.qipuDataKey || '').trim()"
         />
-        <common-tip class="ml-16" title="模块的输出映射中，输出实体数据时使用" />
+        <common-tip class="ml-16" title="模块的输出映射中，输出奇谱实体数据时使用" />
       </a-form-model-item>
     </a-form-model>
     <a-row
@@ -112,10 +144,13 @@
       justify="center"
       class="drawer-bottom"
     >
+      <a-button class="drawer-bottom-btn" type="primary" @click="validate(true)">
+        测试环境部署
+      </a-button>
       <a-button class="drawer-bottom-btn" @click="$emit('closeDrawer')">
         取消
       </a-button>
-      <a-button class="drawer-bottom-btn" type="primary" @click="validate">
+      <a-button v-if="!readOnly" class="drawer-bottom-btn" type="primary" @click="validate()">
         {{ showHistory ? '回滚' : '提交' }}
       </a-button>
     </a-row>
@@ -124,13 +159,12 @@
 
 <script>
 import CommonTip from '../common/tip'
-import CommonChildTree from '../common/childTree'
 import CommonFormItemParams from '../common/formItemParams'
+import { addItem, deleteItem } from '../../utils/tool'
 export default {
   name: 'formDrawer',
   components: {
     CommonTip,
-    CommonChildTree,
     CommonFormItemParams
   },
   props: ['visible', 'form', 'currentId', 'showHistory'],
@@ -160,21 +194,23 @@ export default {
       }
     }
   },
+  computed: {
+    platform() {
+      return this.$route.params.platform
+    },
+    readOnly() {
+      const role = (this.$store.state.user.role || '').split(',')
+      const curPt = role.find(item => item.replace(/_READONLY$/, '') === (this.platform || '').toUpperCase())
+      return /_READONLY$/.test(curPt || '')
+    }
+  },
   methods: {
-    addItem(arr, initItem = {}, noLimit = false) {
-      if (noLimit || arr.length === 0 || arr[arr.length - 1]._id) {
-        arr.push(initItem)
-      } else {
-        this.$message.warning('请完成前述空项的填写！')
-      }
-    },
-    deleteItem(arr, index) {
-      arr.splice(index, 1)
-    },
-    validate() {
+    addItem,
+    deleteItem,
+    validate(isTest) {
       this.$refs.ruleForm.validate(valid => {
         if (valid) {
-          this.$emit('postApi')
+          this.$emit('postApi', { isTest })
         }
       })
     }

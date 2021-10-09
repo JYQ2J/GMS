@@ -131,29 +131,32 @@
       ]"
       @change="tableChange"
     >
-      <span slot="id" slot-scope="text, record, index">
-        <a target="_blank" :href="previewUrl(record._id)">{{ record._id }}</a>
+      <span slot="id" slot-scope="text, record">
+        <a target="_blank" :href="`http://localhost:3000/strategy/${platform}/block?_id=${record._id}`">{{ record._id }}</a>
       </span>
       <span slot="history" slot-scope="text, record, index">
         <a @click="toggleHistory(record, index)">{{ (showHistory === index + 1) ? '已展开' : '展开' }}</a>
       </span>
-      <span slot="operate" slot-scope="text, record, index" style="font-size: 16px;">
-        <a-tooltip placement="top" :title="record.isOnline ? '下线' : '上线'">
+      <span slot="operate" slot-scope="text, record" style="font-size: 16px;">
+        <a-tooltip v-if="!readOnly" placement="top" :title="record.isOnline ? '下线' : '上线'">
           <a-icon
             type="poweroff"
             :style="record.isOnline ? 'color: #52c41a;' : 'color: #f5222d;'"
             @click="postOnlineStatus(record)"
           />
         </a-tooltip>
-        <a-divider type="vertical" />
-        <a-tooltip placement="top" title="编辑">
+        <a-divider v-if="!readOnly" type="vertical" />
+        <a-tooltip v-if="readOnly" placement="top" title="查看">
+          <a-icon type="profile" theme="twoTone" @click="editBlock(record)" />
+        </a-tooltip>
+        <a-tooltip v-else placement="top" title="编辑">
           <a-icon type="edit" theme="twoTone" @click="editBlock(record)" />
         </a-tooltip>
         <a-divider type="vertical" />
-        <a-tooltip placement="top" title="一键导入">
+        <a-tooltip v-if="!readOnly" placement="top" title="一键导入">
           <a-icon type="copy" theme="twoTone" @click="editBlock(handleCopyBlock(record))" />
         </a-tooltip>
-        <a-divider type="vertical" />
+        <a-divider v-if="!readOnly" type="vertical" />
         <preview :id="record._id" :gray="record.gray.type" :list="record.list" @preview="preview">
           <a-tooltip placement="top" :title="record.gray.type === 'NONE' ? '预览': ''">
             <a-icon
@@ -184,27 +187,28 @@
         :title="`${currentId} - ${form.name} 为 线上模块`"
         sub-title="请首先进行对该线上模块进行预览，再执行发布操作"
       />
-      <a-row v-if="showPreview" class="center">
+      <a-row v-if="showPreview" :class="{ center: previewLoading }">
         <a-spin v-if="previewLoading" />
         <div v-else>
           <a-list
+            v-if="rtt.length"
             :data-source="rtt"
             style="text-align: left; max-height: 180px; overflow-y: auto; margin-bottom: 10px;"
             size="small"
             bordered
           >
             <h4 slot="header">请求耗时</h4>
-            <a-list-item slot="renderItem" slot-scope="item, index">
+            <a-list-item slot="renderItem" slot-scope="item">
               <a-list-item-meta>
                 <a slot="title" :href="item.url" target="_blank">{{ item.url.split('?')[0] }}</a>
               </a-list-item-meta>
               <h4>time: {{ item.time }}ms</h4>
             </a-list-item>
           </a-list>
-          <a-textarea v-model="previewJson" :rows="22" style="color: #666; word-break: break-all;" disabled />
+          <a-tree :default-expand-all="true" :tree-data="previewTree" />
         </div>
       </a-row>
-      <a-row slot="footer" style="text-align: center;">
+      <a-row slot="footer" class="center">
         <a-button
           v-if="showPreview"
           class="confirm-bottom-btn"
@@ -239,59 +243,9 @@ import FormDrawer from '../components/block/formDrawer'
 import Preview from '../components/block/preview'
 import { http } from '../utils/http'
 import { prefix } from '../utils/block'
-import { copyItem, jsonFormat } from '../utils/tool'
+import { copyItem, obj2Tree, handlePostBlock } from '../utils/tool'
 
-let mockData = [{
-  "_id":"commonTestData",
-  "group":"common",
-  "name":"通用测试数据",
-  "editor":"jiayanqi",
-  "cache_time":0,
-  "update_time":new Date(),
-  "create_time":new Date(),
-  "cache":{ "time":0, "key":[] },
-  "chunk":[],
-  "list":[{
-    "_id":"A",
-    "gray":"",
-    "api":[{
-      "_id":"5f8d9098c8d3634c4097c17e",
-      "qipuDataKey":"",
-      "qipuIdKey":"",
-      "base":{
-        "_id":"testApi",
-        "name":"测试数据",
-        "url":"http://xxx.xxx.xxx",
-        "cache":{ "time":0,"key":[] },
-        "method":"GET",
-        "timeout":3000
-      },
-      "formater":[{
-        "_id":"5f8d9098c8d3634c4097c183",
-        "size":0,
-        "key":"name",
-        "children":[],
-        "startIndex":0,
-        "order":0,
-        "mapping":[{
-          "value":"metadata.name",
-          "_id":"5f8964a6cdffa61fe3715c4e",
-          "required":[],
-          "type":"KEY"
-        }],
-        "type":"String"
-      }],
-      "headers":[],
-      "body":[],
-      "params":[],
-      "level":"error",
-      "required":[]
-    }]
-  }],
-  "gray":{ "type":"NONE" },
-  "isOnline":false
-}]
-const domain = 'xxx'
+const domain = 'localhost:3000/strategy'
 
 const apiBlank = [{
   level: 'error',
@@ -302,7 +256,9 @@ const apiBlank = [{
 const listBlank = [{
   _id: '',
   gray: '',
-  api: apiBlank
+  api: apiBlank,
+  formater: [],
+  deleter: []
 }]
 
 const cacheBlank = {
@@ -384,7 +340,7 @@ export default {
       showConfirm: false,
       showPreview: false,
       previewLoading: false,
-      previewJson: '',
+      previewTree: '',
       rtt: [],
       // 模块历史数据
       loadingHistory: false,
@@ -409,6 +365,11 @@ export default {
   watch: {
     $route(to) {
       this.getData()
+    },
+    showModal(val) {
+      if (!val) {
+        this.showConfirm = false
+      }
     }
   },
   computed: {
@@ -417,17 +378,21 @@ export default {
     },
     username() {
       return this.$store.state.user.name
+    },
+    readOnly() {
+      const role = (this.$store.state.user.role || '').split(',')
+      const curPt = role.find(item => item.replace(/_READONLY$/, '') === (this.platform || '').toUpperCase())
+      return /_READONLY$/.test(curPt || '')
     }
   },
   methods: {
-    previewUrl(id) {
-      return `http://${domain}/${this.platform}/data/${id}`
-    },
     initFormaterHandler(arr = []) {
       arr.map(item => {
         if ((item.children || []).length) {
           if (item.type.includes('A2O')) {
             item.type = 'Parent-A2O'
+          } else if (item.type.includes('X2O')) {
+            item.type = 'Parent-X2O'
           } else if (['Array', 'Parent-A'].includes(item.type)) {
             item.type = 'Parent-A'
           } else {
@@ -449,10 +414,29 @@ export default {
             return r
           })
           m.kv2v = m.kv2v || {}
+          m.link = m.link || {}
+          m.operation = m.operation || ''
+          if (m.operation === 'T2V' && m.value === 'NOW') {
+            m.operation = 'TIMESTAMP'
+            m.value = ''
+            m.type = 'VALUE'
+          }
+          const splitKey = m.operation.match(/SPLIT\((.+)\)/)
+          if (splitKey) {
+            m.splitKey = splitKey[1]
+            m.operation = 'SPLIT'
+          }
+          const ellipsisKey = m.operation.match(/ELLIPSIS\((.+)\)/)
+          if (ellipsisKey) {
+            m.splitKey = ellipsisKey[1]
+            m.operation = 'ELLIPSIS'
+          }
         })
         item.type = item.type || 'String'
         item.sort = item.sort || {}
+        item.dup = item.dup || {}
         item.a2o = item.a2o || {}
+        item.a2o.required = item.a2o.required || []
       })
     },
     initParamsHandler(arr = []) {
@@ -482,6 +466,9 @@ export default {
             this.initParamsHandler((api.params || []).concat(api.body || []))
             this.initFormaterHandler(api.formater)
           })
+          v.formater = v.formater || []
+          v.deleter = v.deleter || []
+          this.initFormaterHandler(v.formater)
         })
         this.currentId = showHistory ? this.list[showHistory - 1]._id : item._id
       } else {
@@ -495,121 +482,64 @@ export default {
       this.showModal = true
       this.showPreview = true
       this.previewLoading = true
-
-      // MOCK注释
-      // const result = await http(`//${domain}/${this.platform}/data/${id}/${env}`, {
-      //   method: 'POST',
-      //   params: { GRAY },
-      //   data: env === 'preview' ? this.handlePostBlock(true) : {}
-      // })
-      const result = {};
-
+      const result = await http(`//${domain}/${this.platform}/data/${id}/${env}`, {
+        method: 'POST',
+        params: { GRAY },
+        data: ['preview', 'initData'].includes(env) ? handlePostBlock(this.form, this.username, true) : {}
+      })
       if (result.rtt) {
         (this.rtt = result.rtt) && (delete result.rtt)
       }
-      this.previewJson = jsonFormat(result)
+      this.previewTree = Object.keys(result).map(key => obj2Tree(result[key], key))
       this.previewLoading = false
     },
-    handlePostFormater(formater) {
-      return formater.map(item => {
-        let { children = [], mapping = [], type, key, order, sort, a2o, size } = item
-        mapping.map(mapItem => {
-          if (mapItem.type === 'KV2V') {
-            mapItem.required = []
-          } else {
-            mapItem.kv2v = {}
-          }
-        });
-        let [typeArray, typeParent, typeA2O] = [
-          ['Parent-A', 'Array'].includes(type),
-          ['Parent-A', 'Parent-O', 'Parent-A2O'].includes(type),
-          ['A2O', 'Parent-A2O'].includes(type),
-        ]
-        if (type === 'Parent-A') {
-          type = 'Array'
-        } else if (type === 'Parent-O') {
-          type = 'Object'
-        } else if (type === 'Parent-A2O') {
-          type = 'A2O'
-        }
-        return {
-          type,
-          key,
-          mapping,
-          order: typeArray ? order : 0,
-          size: typeArray ? size : 0,
-          sort: typeArray ? sort : {},
-          a2o: typeA2O ? a2o : {},
-          children: typeParent ? this.handlePostFormater(children) : []
-        }
-      })
-    },
-    handlePostParams(params) {
-      return (params || []).map(param => {
-        const { type, _id, value, isFormat, from, inherit, multiKey, splitKey, chunkSize } = param
-        const result = { type, _id, value, splitKey, multiKey, chunkSize }
-        if (type === 'INHERIT') {
-          result.from = isFormat ? (from + '_FORMATER') : from
-        }
-        return result
-      })
-    },
-    handlePostBlock(isPreview) {
-      const { _id, name, isOnline, gray, chunk, list, cache } = this.form
-      const data = { name, isOnline, gray, chunk, cache, list: copyItem(list), editor: this.username }
-      data.list.map(item => {
-        item.api = item.api.map((api, index) => {
-          const { base, required, level, _id, hasQipu, qipuIdKey, qipuDataKey, headers, params, body, formater } = api
-          const result = {
-            level,
-            base: base ? base._id : _id,
-            required: required || [],
-            qipuIdKey: hasQipu ? qipuIdKey : '',
-            qipuDataKey: hasQipu ? qipuDataKey : '',
-            headers: this.handlePostParams(headers),
-            params: this.handlePostParams(params),
-            body: this.handlePostParams(body),
-            formater: this.handlePostFormater(formater)
-          }
-          if (isPreview) {
-            result._id = index
-          }
-          return result
-        })
-      })
-      return data
-    },
-    async postBlock() {
+    async postBlock(opt = {}) {
       this.publishing = true
-      let [data, response] = [this.handlePostBlock(), {}]
-      if (this.currentId) {
-        // MOCK注释
-        // response = await http(`//${domain}/${this.platform}/block/${this.currentId}`, {
-        //   method: 'POST',
-        //   data
-        // })
-        mockData = [{ ...data, _id: this.currentId }]
+      let [data, response] = [handlePostBlock(this.form, this.username), {}]
+      //let domain = opt.isTest ? '10.13.44.194' : 'domain'
+      if (opt.isTest) {
+        let testData = {}
+        if (this.currentId) {
+          testData = await http(`//${domain}/${this.platform}/block?_id=${this.currentId}`)
+        }
+        if (testData[this.currentId]) {
+          response = await http(`//${domain}/${this.platform}/block/${this.currentId}`, {
+            method: 'POST',
+            data
+          })
+        } else {
+          const { prefix = '', _id = '', suffix = '', group = '' } = this.form
+          response = await http(`//${domain}/${this.platform}/block`, {
+            method: 'POST',
+            data: {
+              _id: this.currentId || (prefix + _id + suffix),
+              group: group || prefix,
+              ...data
+            }
+          })
+        }
+      } else if (this.currentId) {
+        response = await http(`//${domain}/${this.platform}/block/${this.currentId}`, {
+          method: 'POST',
+          data
+        })
       } else {
         const { prefix = '', _id = '', suffix = '' } = this.form
-        // MOCK注释
-        // response = await http(`//${domain}/${this.platform}/block`, {
-        //   method: 'POST',
-        //   data: {
-        //     _id: prefix + _id + suffix,
-        //     group: prefix,
-        //     ...data
-        //   }
-        // })
-        mockData.push({ _id: prefix + _id + suffix, group: prefix, ...data })
+        response = await http(`//${domain}/${this.platform}/block`, {
+          method: 'POST',
+          data: {
+            _id: prefix + _id + suffix,
+            group: prefix,
+            ...data
+          }
+        })
       }
-
-      // 请求成功
-      if (true) {
+      if (Object.keys(response).length) {
         this.$message.success('发布成功！')
         this.showModal = false
-        this.showConfirm = false
         this.editing = false
         this.getData(this.blockParams)
+        setTimeout(() => document.body.style = '', 500)
       }
       this.publishing = false
     },
@@ -619,15 +549,11 @@ export default {
       this.$confirm({
         content: `是否确认进行${txt}操作`,
         onOk: async () => {
-          // MOCK注释
-          // let data = await http(`//${domain}/${this.platform}/block/${_id}`, {
-          //   method: 'POST',
-          //   data: { isOnline: !isOnline }
-          // })
-          mockData[0].isOnline = !isOnline
-
-          // 请求成功
-          if (true) {
+          let data = await http(`//${domain}/${this.platform}/block/${_id}`, {
+            method: 'POST',
+            data: { isOnline: !isOnline }
+          })
+          if (data) {
             this.$message.success(txt + '成功')
             this.getData(this.blockParams)
           }
@@ -657,13 +583,9 @@ export default {
       } else {
         this.showHistory = index + 1
         this.loadingHistory = true
-
-        // MOCK注释
-        // this.history = await http(`//${domain}/${this.platform}/exblock/${item._id}`, {
-        //   defaultData: []
-        // })
-        this.history = mockData;
-
+        this.history = await http(`//${domain}/${this.platform}/exblock/${item._id}`, {
+          defaultData: []
+        })
         this.handleTableData(this.history)
         this.loadingHistory = false
       }
@@ -671,19 +593,14 @@ export default {
     async getData(params = {}) {
       this.showHistory = 0
       this.loading = true
-
-      // MOCK注释
-      // this.total = await http(`//${domain}/${this.platform}/block/count`, {
-      //   defaultData: 0,
-      //   params
-      // })
-      // this.list = Object.values(await http(`//${domain}/${this.platform}/block`, {
-      //   defaultData: [],
-      //   params
-      // }))
-      this.total = mockData.length
-      this.list = mockData
-
+      this.total = await http(`//${domain}/${this.platform}/block/count`, {
+        defaultData: 0,
+        params
+      })
+      this.list = Object.values(await http(`//${domain}/${this.platform}/block`, {
+        defaultData: [],
+        params
+      }))
       this.handleTableData(this.list)
       this.blockParams = params
       this.loading = false
